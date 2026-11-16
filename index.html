@@ -62,7 +62,14 @@ function chiave(){
   }
   return k;
 }
-
+function parla(t){
+  if(!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(t);
+  u.lang = "it-IT";
+  u.rate = 1;
+  speechSynthesis.speak(u);
+}
 function aggiungi(classe, t){
   const d = document.createElement("div");
   d.className = "msg " + classe;
@@ -93,8 +100,7 @@ async function invia(){
     if(!r.ok){ throw new Error(dati.error ? dati.error.message : "Errore "+r.status); }
     const risposta = dati.candidates[0].content.parts.map(p=>p.text).join("");
     storico.push({role:"model", parts:[{text:risposta}]});
-    aggiungi("jarvis", risposta);
-    stato.textContent = "SISTEMA ONLINE";
+    aggiungi("jarvis", risposta); parla(risposta);
   }catch(e){
     storico.pop();
     aggiungi("jarvis","Errore: "+e.message);
