@@ -7,33 +7,111 @@
 <style>
   body{margin:0;height:100vh;background:radial-gradient(circle at center,#06222e,#02080c);
     color:#5ee7ff;font-family:Arial,sans-serif;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;overflow:hidden}
-  h1{letter-spacing:12px;font-weight:300;text-shadow:0 0 15px #00d4ff;margin:0 0 30px}
-  .core{position:relative;width:220px;height:220px}
+    align-items:center;overflow:hidden}
+  h1{letter-spacing:12px;font-weight:300;text-shadow:0 0 15px #00d4ff;margin:15px 0 10px;font-size:24px}
+  .core{position:relative;width:130px;height:130px;flex-shrink:0}
   .ring{position:absolute;border-radius:50%;border:2px solid #00d4ff;box-shadow:0 0 20px #00d4ff}
   .r1{inset:0;border-style:dashed;animation:spin 14s linear infinite}
-  .r2{inset:25px;border-color:#5ee7ff;border-top-color:transparent;animation:spin 6s linear infinite reverse}
-  .r3{inset:55px;animation:pulse 2.5s ease-in-out infinite}
-  .dot{position:absolute;inset:90px;border-radius:50%;background:#00d4ff;box-shadow:0 0 40px #00d4ff}
+  .r2{inset:15px;border-color:#5ee7ff;border-top-color:transparent;animation:spin 6s linear infinite reverse}
+  .r3{inset:32px;animation:pulse 2.5s ease-in-out infinite}
+  .dot{position:absolute;inset:52px;border-radius:50%;background:#00d4ff;box-shadow:0 0 30px #00d4ff}
+  .pensa .r1{animation-duration:2s}.pensa .r2{animation-duration:1s}
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes pulse{50%{transform:scale(1.15);opacity:.5}}
-  #stato{margin:30px 0 15px;font-size:14px;letter-spacing:3px;opacity:.8}
-  .barra{display:flex;gap:8px;width:80%;max-width:500px}
+  #stato{margin:10px 0;font-size:12px;letter-spacing:3px;opacity:.8}
+  #chat{flex:1;width:90%;max-width:700px;overflow-y:auto;padding:10px;
+    border:1px solid #0a4a5c;border-radius:10px;background:rgba(3,24,32,.6)}
+  .msg{margin:8px 0;padding:10px 14px;border-radius:10px;line-height:1.4;white-space:pre-wrap}
+  .tu{background:#0a3a4a;margin-left:15%;text-align:right}
+  .jarvis{background:#052a36;margin-right:15%;border-left:3px solid #00d4ff}
+  .barra{display:flex;gap:8px;width:90%;max-width:700px;margin:12px 0}
   input{flex:1;padding:12px;background:#031820;border:1px solid #00d4ff;border-radius:8px;
     color:#5ee7ff;font-size:16px;outline:none}
   button{padding:12px 18px;background:#00d4ff;border:none;border-radius:8px;font-weight:bold}
+  #imp{font-size:12px;color:#5ee7ff;background:none;border:1px solid #0a4a5c;
+    padding:5px 10px;margin-bottom:8px;font-weight:normal}
 </style>
 </head>
 <body>
   <h1>JARVIS</h1>
-  <div class="core">
+  <div class="core" id="core">
     <div class="ring r1"></div><div class="ring r2"></div>
     <div class="ring r3"></div><div class="dot"></div>
   </div>
   <div id="stato">SISTEMA ONLINE</div>
+  <div id="chat"></div>
   <div class="barra">
     <input id="testo" placeholder="Scrivi a Jarvis...">
-    <button onclick="document.getElementById('stato').textContent='IN ATTESA DEL CERVELLO (TAPPA 3)'">Invia</button>
+    <button id="invia">Invia</button>
   </div>
+  <button id="imp">Impostazioni chiave</button>
+
+<script>
+const MODELLO = "gemini-4-hydrogen";
+const chat = document.getElementById("chat");
+const testo = document.getElementById("testo");
+const stato = document.getElementById("stato");
+const core = document.getElementById("core");
+let storico = [];
+
+function chiave(){
+  let k = localStorage.getItem("gemini_key");
+  if(!k){
+    k = prompt("Incolla qui la tua chiave Gemini (resta salvata solo su questo dispositivo):");
+    if(k){ localStorage.setItem("gemini_key", k.trim()); }
+  }
+  return k;
+}
+
+function aggiungi(classe, t){
+  const d = document.createElement("div");
+  d.className = "msg " + classe;
+  d.textContent = t;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+  return d;
+}
+
+async function invia(){
+  const domanda = testo.value.trim();
+  if(!domanda) return;
+  const k = chiave();
+  if(!k){ aggiungi("jarvis","Serve la chiave per funzionare."); return; }
+  testo.value = "";
+  aggiungi("tu", domanda);
+  storico.push({role:"user", parts:[{text:domanda}]});
+  stato.textContent = "ELABORAZIONE...";
+  core.classList.add("pensa");
+  try{
+    const r = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/"+MODELLO+":generateContent?key="+k,
+      {method:"POST",headers:{"Content-Type":"application/json"},
+       body:JSON.stringify({
+         systemInstruction:{parts:[{text:"Sei Jarvis, assistente personale di uno studente. Rispondi in italiano, in modo chiaro, utile e conciso."}]},
+         contents:storico})});
+    const dati = await r.json();
+    if(!r.ok){ throw new Error(dati.error ? dati.error.message : "Errore "+r.status); }
+    const risposta = dati.candidates[0].content.parts.map(p=>p.text).join("");
+    storico.push({role:"model", parts:[{text:risposta}]});
+    aggiungi("jarvis", risposta);
+    stato.textContent = "SISTEMA ONLINE";
+  }catch(e){
+    storico.pop();
+    aggiungi("jarvis","Errore: "+e.message);
+    stato.textContent = "ERRORE";
+  }
+  core.classList.remove("pensa");
+}
+
+document.getElementById("invia").onclick = invia;
+testo.addEventListener("keydown", e=>{ if(e.key==="Enter") invia(); });
+document.getElementById("imp").onclick = ()=>{
+  const k = prompt("Nuova chiave Gemini (lascia vuoto per cancellare quella salvata):");
+  if(k===null) return;
+  if(k.trim()==="") localStorage.removeItem("gemini_key");
+  else localStorage.setItem("gemini_key", k.trim());
+};
+aggiungi("jarvis","Buongiorno. Sono Jarvis. Come posso aiutarti?");
+</script>
 </body>
 </html>
