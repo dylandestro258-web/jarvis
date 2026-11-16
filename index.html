@@ -43,6 +43,7 @@
   <div class="barra">
     <input id="testo" placeholder="Scrivi a Jarvis...">
     <button id="invia">Invia</button>
+    <button id="mic">🎤</button>
   </div>
   <button id="imp">Impostazioni chiave</button>
 
@@ -62,14 +63,23 @@ function chiave(){
   }
   return k;
 }
+
 function parla(t){
-  if(!("speechSynthesis" in window)) return;
-  speechSynthesis.cancel();
-  const u = new SpeechSynthesisUtterance(t);
-  u.lang = "it-IT";
-  u.rate = 1;
-  speechSynthesis.speak(u);
+  try{
+    if(!("speechSynthesis" in window)) return;
+    speechSynthesis.cancel();
+    setTimeout(()=>{
+      speechSynthesis.resume();
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = "it-IT";
+      const v = speechSynthesis.getVoices().find(x=>x.lang && x.lang.startsWith("it"));
+      if(v) u.voice = v;
+      window.ultimaVoce = u;
+      speechSynthesis.speak(u);
+    }, 250);
+  }catch(e){}
 }
+
 function aggiungi(classe, t){
   const d = document.createElement("div");
   d.className = "msg " + classe;
@@ -100,13 +110,41 @@ async function invia(){
     if(!r.ok){ throw new Error(dati.error ? dati.error.message : "Errore "+r.status); }
     const risposta = dati.candidates[0].content.parts.map(p=>p.text).join("");
     storico.push({role:"model", parts:[{text:risposta}]});
-    aggiungi("jarvis", risposta); parla(risposta);
+    aggiungi("jarvis", risposta);
+    parla(risposta);
+    stato.textContent = "SISTEMA ONLINE";
   }catch(e){
     storico.pop();
     aggiungi("jarvis","Errore: "+e.message);
     stato.textContent = "ERRORE";
   }
   core.classList.remove("pensa");
+}
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const mic = document.getElementById("mic");
+if(!SR){
+  mic.style.display = "none";
+}else{
+  const rec = new SR();
+  rec.lang = "it-IT";
+  rec.interimResults = false;
+  rec.onstart = ()=>{ stato.textContent = "TI ASCOLTO..."; mic.style.background = "#ff5e5e"; };
+  rec.onend = ()=>{ mic.style.background = "#00d4ff"; if(stato.textContent === "TI ASCOLTO...") stato.textContent = "SISTEMA ONLINE"; };
+  rec.onerror = ()=>{ stato.textContent = "MICROFONO NON DISPONIBILE"; };
+  rec.onresult = e=>{
+    testo.value = e.results[0][0].transcript;
+    invia();
+  };
+  mic.onclick = ()=>{
+    try{
+      speechSynthesis.cancel();
+      const sblocco = new SpeechSynthesisUtterance(" ");
+      sblocco.volume = 0;
+      speechSynthesis.speak(sblocco);
+    }catch(err){}
+    try{ rec.start(); }catch(err){}
+  };
 }
 
 document.getElementById("invia").onclick = invia;
